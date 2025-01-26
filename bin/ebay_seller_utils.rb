@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+
 require 'dotenv'
 require 'fileutils'
 require 'thor'
