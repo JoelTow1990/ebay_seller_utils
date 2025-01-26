@@ -9,16 +9,6 @@ require 'uri'
 Dotenv.load
 FileUtils.cd(__dir__)
 
-DESIRED_METADATA = [
-  'Title',
-  'Description',
-  'PrimaryCategory/ns:CategoryName',
-  'StartPrice',
-  'ListingDetails/ns:MinimumBestOfferPrice',
-  'ConditonDisplayName',
-  'ConditionDescription',
-]
-
 class EbayAPI
   HEADERS = {
     'X-EBAY-API-SITEID' => '15',
@@ -88,21 +78,52 @@ class EbayAPI
   end
 end
 
-def field_name(field)
-  split = field.split('/ns:')
-  split.length > 1 ? split[1] : field
-end
+class Listing
+  DESIRED_METADATA = [
+    'Title',
+    'Description',
+    'PrimaryCategory/ns:CategoryName',
+    'StartPrice',
+    'ListingDetails/ns:MinimumBestOfferPrice',
+    'ConditonDisplayName',
+    'ConditionDescription',
+  ]
 
-def text_data(listing, field)
-  listing.xpath("ns:#{field}").text&.gsub(/<\/?[^>]*>/, '')&.strip
+  def initialize(node)
+    @node = node
+  end
+
+  def metadata
+    @metadata ||= DESIRED_METADATA.each_with_object({}) do |field, hash|
+      data = text_data(field)
+      next if data.nil?
+
+      hash[field_name(field)] = data
+    end
+  end
+
+  def image_urls
+    @node.xpath('ns:PictureDetails/ns:PictureURL').map(&:text)
+  end
+
+  private
+
+  def camelize(string)
+    string.split('_').map(&:capitalize).join
+  end
+
+  def text_data(field)
+    @node.xpath("ns:#{field}").text&.gsub(/<\/?[^>]*>/, '')&.strip
+  end
+
+  def field_name(field)
+    split = field.split('/ns:')
+    split.length > 1 ? split[1] : field
+  end
 end
 
 def directory_name(listing)
-  listing.xpath(
-    "ns:PrimaryCategory/ns:CategoryName"
-    ).text
-     .split(/[^\w]+/)
-     .first
+  listing.metadata['CategoryName'].split(/[^\w]+/).first
 end
 
 def write_listing_metadata(listing)
@@ -110,25 +131,19 @@ def write_listing_metadata(listing)
   write_mode = File.exist?(filename) ? 'w' : 'wx'
 
   File.open('metadata.txt', write_mode) do |f|
-    DESIRED_METADATA.each do |field|
-      data = text_data(listing, field)
-      next if data.nil?
+    listing.metadata.each do |field, data|
 
-      f.write("#{field_name(field)}: #{data}\n")
+      f.write("#{field}: #{data}\n")
     end
   end
-end
-
-def image_urls(listing)
-  listing.xpath('ns:PictureDetails/ns:PictureURL').map(&:text)
 end
 
 def retrieve_and_save_image(url, save_name)
   URI.open(url) do |webp_image|
     image = MiniMagick::Image.read(webp_image.read)
 
-    image.format("png")
-    image.write("#{save_name}.png")
+    image.format "png"
+    image.write "#{save_name}.png"
   end
 end
 
@@ -167,16 +182,17 @@ response = ebay_api.response(request)
   puts "Scraping page #{page}"
   puts "Response: #{response}"
   ebay_api.listings(response).each_with_index do |listing, idx|
+    listing = Listing.new(listing)
     puts "Processing listing #{idx} of page #{page}"
     directory = directory_name(listing)
     FileUtils.mkdir(directory) unless File.exist?(directory) && File.directory?(directory)
     FileUtils.cd(directory) do
-      snake_name = listing.xpath("ns:Title").text.gsub(/[^\w ]/, '').gsub(/ +/, ' ').gsub(' ', '_').downcase
+      snake_name = listing.metadata['Title'].gsub(/[^\w ]/, '').gsub(/ +/, ' ').gsub(' ', '_').downcase
       FileUtils.mkdir(snake_name) unless File.exist?(snake_name) && File.directory?(snake_name)
       FileUtils.cd(snake_name) do
         write_listing_metadata(listing)
 
-        image_urls(listing).each_with_index do |url, i|
+        listing.image_urls.each_with_index do |url, i|
           image_name = "#{snake_name}#{i}"
 
           retrieve_and_save_image(url, image_name)
