@@ -10,7 +10,7 @@ require_relative '../lib/listing_persister'
 
 class EbaySellerUtils < Thor
   desc 'execute', <<~DESC
-  From project root run `ruby ebay_seller_utils.rb --dry_run={true|false}`
+  From project root run `ruby bin/ebay_seller_utils.rb --dry_run={true|false}`
   Will query the ebay api to get all seller listings in hardcoded time period.
   Metadata from listings, and all associated images, are saved locally.
   The structure is:
