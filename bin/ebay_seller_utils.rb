@@ -1,12 +1,27 @@
 require 'dotenv'
 require 'fileutils'
+require 'thor'
 
 require_relative '../lib/ebay_api'
 require_relative '../lib/listing'
 require_relative '../lib/listing_persister'
 
-class EbaySellerUtils
+class EbaySellerUtils < Thor
+  desc 'execute', <<~DESC
+  From project root run `ruby ebay_seller_utils.rb --dry_run={true|false}`
+  Will query the ebay api to get all seller listings in hardcoded time period.
+  Metadata from listings, and all associated images, are saved locally.
+  The structure is:
+    $HOME/EbayListings/Category/ListingTitle/*
+      - metadata.txt in the relevant directory will store the text metadata
+      - The images will be saved in a snake_case format derived from the listing titles.
+  DESC
+  default_task :execute
+  option :dry_run, default: true, type: :boolean
+
   def execute
+    puts "[EXECUTING] Task in progress with dry_run=#{options[:dry_run]}..."
+
     Dotenv.load
 
     FileUtils.cd(Dir.home)
@@ -35,22 +50,18 @@ class EbaySellerUtils
           )
         response = ebay_api.response(request)
 
-        puts "Scraping page #{page}"
-        puts "Response: #{response}"
+        puts "Extracting data from page #{page}"
         ebay_api.listings(response).each_with_index do |listing, idx|
           listing = Listing.new(listing)
           persister = ListingPersister.new(listing)
           puts "Processing listing #{idx} of page #{page}"
-          persister.persist
+          persister.persist unless options[:dry_run]
         end
       end
     end
+
+    puts "[SUCCESS] Task completed successfully!"
   end
 end
 
-if __FILE__ == $0
-  EbaySellerUtils.new.execute
-end
-
-
-
+EbaySellerUtils.start(ARGV)
