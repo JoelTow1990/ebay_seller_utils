@@ -122,41 +122,64 @@ class Listing
   end
 end
 
-def directory_name(listing)
-  listing.metadata['CategoryName'].split(/[^\w]+/).first
-end
+class ListingPersister
+  def initialize(listing)
+    @listing = listing
+  end
 
-def write_listing_metadata(listing)
-  filename = 'metadata.txt'
-  write_mode = File.exist?(filename) ? 'w' : 'wx'
-
-  File.open('metadata.txt', write_mode) do |f|
-    listing.metadata.each do |field, data|
-
-      f.write("#{field}: #{data}\n")
+  def persist
+    category_dir = normalised_category
+    FileUtils.mkdir(category_dir) unless File.directory?(category_dir)
+    FileUtils.cd(category_dir) do
+      persist_dir = normalised_title
+      FileUtils.mkdir(persist_dir) unless File.directory?(persist_dir)
+      
+      FileUtils.cd(persist_dir) do
+        persist_metadata
+        persist_images
+      end
     end
   end
-end
 
-def retrieve_and_save_image(url, save_name)
-  URI.open(url) do |webp_image|
-    image = MiniMagick::Image.read(webp_image.read)
+  def persist_metadata
+    filename = 'metadata.txt'
+    write_mode = File.exist?(filename) ? 'w' : 'wx'
 
-    image.format "png"
-    image.write "#{save_name}.png"
+    File.open('metadata.txt', write_mode) do |f|
+      @listing.metadata.each do |field, data|
+
+        f.write("#{field}: #{data}\n")
+      end
+    end
+  end
+
+  def persist_images
+    base_name = normalised_title
+    @listing.image_urls.each_with_index do |url, idx|
+      image_name = "#{base_name}#{idx}"
+      retrieve_and_persist_image(url, image_name)
+    end
+  end
+
+  def retrieve_and_persist_image(url, save_name)
+    URI.open(url) do |webp_image|
+      image = MiniMagick::Image.read(webp_image.read)
+
+      image.format "png"
+      image.write "#{save_name}.png"
+    end
+  end
+
+  private
+
+  def normalised_category
+    @listing.metadata['CategoryName'].split(/[^\w]+/).first
+  end
+
+  def normalised_title
+    @listing.metadata['Title'].gsub(/[^\w ]/, '').gsub(/ +/, ' ').gsub(' ', '_').downcase
   end
 end
-
-# Note, pretty clearly there is a listing class emerging here
-# The rest is maybe done by Thor class and handled by external libraries
-# But you are building way too much logic around handling a listing
-# Probably there is a request handling class
-# And a persister class to manage logic of saving
-#Should the persister know naming conventions used or is that for some driver program or the execute 
-# method to know? I think I lean to the latter
-
-# This is essentially going to be execute - need to wrap in iteration over responses
-# TODO method for getting iterations
 
 api_uri = URI('https://api.ebay.com/ws/api.dll')
 user_id = ENV["USER_ID"]
@@ -183,22 +206,9 @@ response = ebay_api.response(request)
   puts "Response: #{response}"
   ebay_api.listings(response).each_with_index do |listing, idx|
     listing = Listing.new(listing)
+    persister = ListingPersister.new(listing)
     puts "Processing listing #{idx} of page #{page}"
-    directory = directory_name(listing)
-    FileUtils.mkdir(directory) unless File.exist?(directory) && File.directory?(directory)
-    FileUtils.cd(directory) do
-      snake_name = listing.metadata['Title'].gsub(/[^\w ]/, '').gsub(/ +/, ' ').gsub(' ', '_').downcase
-      FileUtils.mkdir(snake_name) unless File.exist?(snake_name) && File.directory?(snake_name)
-      FileUtils.cd(snake_name) do
-        write_listing_metadata(listing)
-
-        listing.image_urls.each_with_index do |url, i|
-          image_name = "#{snake_name}#{i}"
-
-          retrieve_and_save_image(url, image_name)
-        end
-      end
-    end
+    persister.persist
   end
 end
 
