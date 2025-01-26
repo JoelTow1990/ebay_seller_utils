@@ -19,58 +19,73 @@ DESIRED_METADATA = [
   'ConditionDescription',
 ]
 
-api_uri = URI('https://api.ebay.com/ws/api.dll')
+class EbayAPI
+  HEADERS = {
+    'X-EBAY-API-SITEID' => '15',
+    'X-EBAY-API-COMPATIBILITY-LEVEL' => '967',
+    'X-EBAY-API-CALL-NAME' => 'GetSellerList'
+  }
 
-def body(page: 1)
-  <<~XML
-    <?xml version="1.0" encoding="utf-8"?>
-    <GetSellerListRequest xmlns="urn:ebay:apis:eBLBaseComponents">
-      <RequesterCredentials>
-        <eBayAuthToken>#{ENV["AUTH_TOKEN"]}</eBayAuthToken>
-      </RequesterCredentials>
-      <ErrorLanguage>en_US</ErrorLanguage>
-      <WarningLevel>High</WarningLevel>
-      <DetailLevel>ReturnAll</DetailLevel> 
-      <StartTimeFrom>2024-12-01T00:00:00.000Z</StartTimeFrom> 
-      <StartTimeTo>2025-01-16T23:59:59.999Z</StartTimeTo> 
-      <UserID>#{ENV["USER_ID"]}</UserID>
-      <IncludeWatchCount>true</IncludeWatchCount> 
-      <WarningLevel>High</WarningLevel>
-      <Pagination> 
-        <EntriesPerPage>20</EntriesPerPage> 
-        <PageNumber>#{page}</PageNumber>
-      </Pagination> 
-    </GetSellerListRequest>
-  XML
-end
+  def initialize(api_uri, user_id, auth_token)
+    @api_uri = api_uri
+    @user_id = user_id
+    @auth_token = auth_token
+  end
 
-def request(body, uri)
-  request = Net::HTTP::Post.new(uri.path)
-  request['X-EBAY-API-SITEID'] = '15'
-  request['X-EBAY-API-COMPATIBILITY-LEVEL'] = '967'
-  request['X-EBAY-API-CALL-NAME'] = 'GetSellerList'
+  def body(page:)
+    Nokogiri::XML::Builder.new(encoding: 'UTF-8') do |xml|
+      xml.GetSellerListRequest(xmlns: "urn:ebay:apis:eBLBaseComponents") do
+        xml.RequesterCredentials do
+          xml.eBayAuthToken @auth_token
+        end
+        xml.ErrorLanguage "en_US"
+        xml.WarningLevel "High"
+        xml.DetailLevel "ReturnAll"
+        xml.StartTimeFrom "2024-12-01T00:00:00.000Z"
+        xml.StartTimeTo "2025-01-16T23:59:59.999Z"
+        xml.UserID @user_id
+        xml.IncludeWatchCount "true"
+        xml.WarningLevel "High"
+        xml.Pagination do
+          xml.EntriesPerPage "20"
+          xml.PageNumber "#{page}"
+        end
+      end
+    end.to_xml
+  end
 
-  request.body = body
-  request
-end
+  def request(body)
+    request = Net::HTTP::Post.new(@api_uri.path)
+    HEADERS.each do |field, value|
+      request[field] = value
+    end
+    request.body = body
+    request
+  end
 
-def response(request, uri)
-  http = Net::HTTP.new(uri.host, uri.port)
-  http.use_ssl = true
+  def response(request)
+    http = Net::HTTP.new(@api_uri.host, @api_uri.port)
+    http.use_ssl = true
+    http.request(request)
+  end
 
-  http.request(request)
-end
+  def pages_to_scrape(response)
+    doc = parse_response(response)
+    doc.at_xpath('//ns:PaginationResult/ns:TotalNumberOfPages').text.to_i
+  end
 
-def parse_response(response)
-  doc = Nokogiri::XML(response.body)
-  doc.root.add_namespace_definition('ns', 'urn:ebay:apis:eBLBaseComponents')
-  doc
-end
+  def listings(response)
+    doc = parse_response(response)
+    doc.xpath('//ns:Item', 'ns')
+  end
 
-def item_listings(response)
-  # doc = Nokogiri::XML(response.body)
-  # doc.root.add_namespace_definition('ns', 'urn:ebay:apis:eBLBaseComponents')
-  parse_response(response).xpath('//ns:Item', 'ns')
+  private
+
+  def parse_response(response)
+    doc = Nokogiri::XML(response.body)
+    doc.root.add_namespace_definition('ns', 'urn:ebay:apis:eBLBaseComponents')
+    doc
+  end
 end
 
 def field_name(field)
@@ -117,12 +132,6 @@ def retrieve_and_save_image(url, save_name)
   end
 end
 
-def pages_to_scrape(response)
-  parse_response(response).xpath(
-    '//ns:PaginationResult/ns:TotalNumberOfPages', 'ns' => 'urn:ebay:apis:eBLBaseComponents'
-  ).text.to_i
-end
-
 # Note, pretty clearly there is a listing class emerging here
 # The rest is maybe done by Thor class and handled by external libraries
 # But you are building way too much logic around handling a listing
@@ -133,15 +142,31 @@ end
 
 # This is essentially going to be execute - need to wrap in iteration over responses
 # TODO method for getting iterations
-request = request(body, api_uri)
-response = response(request, api_uri)
 
-(1..pages_to_scrape(response)).each do |page|
-  request = request(body(page: page), api_uri)
-  response = response(request, api_uri)
+api_uri = URI('https://api.ebay.com/ws/api.dll')
+user_id = ENV["USER_ID"]
+auth_token = ENV["AUTH_TOKEN"]
+
+ebay_api = EbayAPI.new(
+  api_uri,
+  user_id,
+  auth_token,
+)
+
+request = ebay_api.request(
+  ebay_api.body(page: 1)
+  )
+response = ebay_api.response(request)
+
+(1..ebay_api.pages_to_scrape(response)).each do |page|
+  request = ebay_api.request(
+    ebay_api.body(page: page)
+    )
+  response = ebay_api.response(request)
 
   puts "Scraping page #{page}"
-  item_listings(response).each_with_index do |listing, idx|
+  puts "Response: #{response}"
+  ebay_api.listings(response).each_with_index do |listing, idx|
     puts "Processing listing #{idx} of page #{page}"
     directory = directory_name(listing)
     FileUtils.mkdir(directory) unless File.exist?(directory) && File.directory?(directory)
@@ -160,4 +185,5 @@ response = response(request, api_uri)
     end
   end
 end
-#puts pages_to_scrape(response)
+
+
