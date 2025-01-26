@@ -11,6 +11,7 @@ Configurable dry-run mode for safe testing
 
 Ruby 3.x (3.3.5 preferred)
 Bundler
+ImageMagick (download [here](https://imagemagick.org/script/download.php))
 eBay Developer Account
 eBay API Credentials
 
