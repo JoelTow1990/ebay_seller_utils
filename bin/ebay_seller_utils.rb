@@ -48,7 +48,7 @@ class EbaySellerUtils < Thor
       response = ebay_api.response(request)
 
       total_pages = ebay_api.pages_to_scrape(response)
-      puts "Total pages to scrape: #{total_pages - options[:start_page]}"
+      puts "Total pages to scrape: #{total_pages - (options[:start_page] - 1)}"
 
       (options[:start_page]..total_pages).each do |page|
         begin
