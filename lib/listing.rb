@@ -9,6 +9,8 @@ class Listing
     'ListingDetails/ns:MinimumBestOfferPrice',
     'ConditionDisplayName',
     'ConditionDescription',
+    'Quantity',
+    'SellingStatus/ns:QuantitySold',
   ]
 
   def initialize(node)

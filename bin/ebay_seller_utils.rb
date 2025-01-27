@@ -20,7 +20,7 @@ class EbaySellerUtils < Thor
   DESC
   default_task :execute
   option :dry_run, default: true, type: :boolean
-  option :start_page, defailt: 1, type: :numeric
+  option :start_page, default: 1, type: :numeric
 
   def execute
     puts "[EXECUTING] Task in progress with dry_run=#{options[:dry_run]}..."
@@ -48,7 +48,7 @@ class EbaySellerUtils < Thor
       response = ebay_api.response(request)
 
       total_pages = ebay_api.pages_to_scrape(response)
-      puts "Total pages to scrape: #{total_pages}"
+      puts "Total pages to scrape: #{total_pages - options[:start_page]}"
 
       (options[:start_page]..total_pages).each do |page|
         begin
@@ -58,6 +58,7 @@ class EbaySellerUtils < Thor
           response = ebay_api.response(request)
 
           puts "Extracting data from page #{page}"
+
           ebay_api.listings(response).each_with_index do |listing, idx|
             listing = Listing.new(listing)
             persister = ListingPersister.new(listing)
