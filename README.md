@@ -25,7 +25,7 @@ AUTH_TOKEN='your_auth_token'
 
 ## Usage
 From the project root, run:
-  `ruby bin/ebay_seller_utils.rb [--dry_run={true|false}]`
+  `ruby bin/ebay_seller_utils.rb [--dry_run={true|false}] [--start_page={page_number}]`
 
 ## Options
 
@@ -33,6 +33,10 @@ From the project root, run:
 
 `true` (default): Simulates the process without downloading files
 `false`: Actually downloads listings and images
+
+`--start_page:`
+
+`int` (default 1): The page number to start scraping from
 
 ## Output Structure
 Listings are saved in the following directory structure:

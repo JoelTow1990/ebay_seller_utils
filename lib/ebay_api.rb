@@ -25,7 +25,7 @@ class EbayAPI
         xml.WarningLevel "High"
         xml.DetailLevel "ReturnAll"
         xml.StartTimeFrom "2024-12-01T00:00:00.000Z"
-        xml.StartTimeTo "2025-01-16T23:59:59.999Z"
+        xml.StartTimeTo "2025-02-16T23:59:59.999Z"
         xml.UserID @user_id
         xml.IncludeWatchCount "true"
         xml.WarningLevel "High"
