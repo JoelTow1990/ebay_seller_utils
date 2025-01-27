@@ -7,7 +7,7 @@ class Listing
     'PrimaryCategory/ns:CategoryName',
     'StartPrice',
     'ListingDetails/ns:MinimumBestOfferPrice',
-    'ConditonDisplayName',
+    'ConditionDisplayName',
     'ConditionDescription',
   ]
 
