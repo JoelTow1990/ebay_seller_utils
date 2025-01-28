@@ -111,7 +111,7 @@ class EbaySellerUtils < Thor
   private
 
   def initialize_dates(start_date, end_date)
-    if start_date == end_date
+    if start_date >= end_date
       starting = parse_date(start_date)
       ending = starting + 120
       [starting, ending]
