@@ -12,12 +12,16 @@ class ListingPersister
 
   def persist
     category_dir = normalised_category
+    puts "Category dir: #{category_dir}"
     FileUtils.mkdir(category_dir) unless File.directory?(category_dir)
     FileUtils.cd(category_dir) do
       persist_dir = normalised_title
+      puts "Persist dir: #{persist_dir}"
       FileUtils.mkdir(persist_dir) unless File.directory?(persist_dir)
       
       FileUtils.cd(persist_dir) do
+        puts "PWD: #{FileUtils.pwd}"
+        puts "Current record: #{@record}"
         return unless valid_entry?(persist_dir)
 
         persist_dir = entry_exists?(persist_dir) ? persist_dir + random_char : persist_dir
@@ -35,7 +39,8 @@ class ListingPersister
 
     File.open('metadata.txt', write_mode) do |f|
       @listing.metadata.each do |field, data|
-        puts "Writing #{field}: #{data}"
+        puts "Field: #{field}"
+        puts "Data: #{data}"
         f.write("#{field}: #{data}\n")
       end
     end
@@ -78,7 +83,8 @@ class ListingPersister
   end
 
   def update_record(persist_dir)
-    @record[persist_dir] = "#{persist_dir}/metadata.txt"
+    puts persist_dir
+    @record[persist_dir] = "#{File.join(Dir.home, "EbayListings", normalised_category, persist_dir)}/metadata.txt"
   end
 
   private
