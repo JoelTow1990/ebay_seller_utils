@@ -49,6 +49,8 @@ class EbaySellerUtils < Thor
       start_date, end_date = initialize_dates(options[:start_date], options[:end_date])
       persister = ListingPersister.new({}) # A hack, you can't call any methods on this
 
+      FileUtils.touch("Errors.txt") unless File.exist?("Errors.txt")
+
       while end_date < (Date.today + 2)
         request = ebay_api.request(
           ebay_api.body(
@@ -76,15 +78,22 @@ class EbaySellerUtils < Thor
 
             puts "Extracting data from page #{page}"
 
-            ebay_api.listings(response).each_with_index do |listing, idx|
-              listing = Listing.new(listing)
-              persister.listing = listing
+            begin
+              ebay_api.listings(response).each_with_index do |listing, idx|
+                listing = Listing.new(listing)
+                persister.listing = listing
 
-              puts "Processing listing #{idx} of page #{page}"
-              persister.persist unless options[:dry_run]
+                puts "Processing listing #{idx} of page #{page}"
+                persister.persist unless options[:dry_run]
+              end
+            rescue StandardError => e
+              File.open("Errors.txt", 'a') do |f|
+                f.puts("#{listing.title}")
+              end
             end
+
           rescue StandardError => e
-            puts "Error on page #{page}: #{e}"
+            puts "Error with request on page #{page}: #{e}"
             next
           end
         end
