@@ -22,8 +22,8 @@ class EbaySellerUtils < Thor
   default_task :execute
   option :dry_run, default: true, type: :boolean
   option :start_page, default: 1, type: :numeric
-  option :start_date, default: "01/01/2023", type: :string
-  option :end_date, default: "01/01/2023", type: :string
+  option :start_date, default: "01/01/2022", type: :string
+  option :end_date, default: "01/01/2022", type: :string
   option :single_iteration, default: false, type: :boolean
 
   def execute
