@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 
+require 'date'
 require 'dotenv'
 require 'fileutils'
 require 'thor'
@@ -21,6 +22,9 @@ class EbaySellerUtils < Thor
   default_task :execute
   option :dry_run, default: true, type: :boolean
   option :start_page, default: 1, type: :numeric
+  option :start_date, default: "01/01/2023", type: :string
+  option :end_date, default: "01/01/2023", type: :string
+  option :single_iteration, default: false, type: :boolean
 
   def execute
     puts "[EXECUTING] Task in progress with dry_run=#{options[:dry_run]}..."
@@ -42,37 +46,68 @@ class EbaySellerUtils < Thor
         auth_token,
       )
 
-      request = ebay_api.request(
-        ebay_api.body(page: 1)
-        )
-      response = ebay_api.response(request)
+      start_date, end_date = initialize_dates(options[:start_date], options[:end_date])
 
-      total_pages = ebay_api.pages_to_scrape(response)
-      puts "Total pages to scrape: #{total_pages - (options[:start_page] - 1)}"
-
-      (options[:start_page]..total_pages).each do |page|
-        begin
-          request = ebay_api.request(
-            ebay_api.body(page: page)
+      while end_date < (Date.today + 2)
+        request = ebay_api.request(
+          ebay_api.body(
+            page: 1,
+            start_date: start_date,
+            end_date: end_date,
             )
-          response = ebay_api.response(request)
+          )
+        response = ebay_api.response(request)
 
-          puts "Extracting data from page #{page}"
+        total_pages = ebay_api.pages_to_scrape(response)
+        puts "Date range: #{start_date.to_s} - #{end_date.to_s}"
+        puts "Total pages for this range: #{total_pages - (options[:start_page] - 1)}"
 
-          ebay_api.listings(response).each_with_index do |listing, idx|
-            listing = Listing.new(listing)
-            persister = ListingPersister.new(listing)
-            puts "Processing listing #{idx} of page #{page}"
-            persister.persist unless options[:dry_run]
+        (options[:start_page]..total_pages).each do |page|
+          begin
+            request = ebay_api.request(
+              ebay_api.body(
+                page: page,
+                start_date: start_date,
+                end_date: end_date,
+                )
+              )
+            response = ebay_api.response(request)
+
+            puts "Extracting data from page #{page}"
+
+            ebay_api.listings(response).each_with_index do |listing, idx|
+              listing = Listing.new(listing)
+              persister = ListingPersister.new(listing)
+              puts "Processing listing #{idx} of page #{page}"
+              persister.persist unless options[:dry_run]
+            end
+          rescue StandardError => e
+            puts "Error on page #{page}: #{e}"
+            next
           end
-        rescue StandardError => e
-          puts "Error on page #{page}: #{e}"
-          next
         end
+
+        break if options[:single_iteration]
       end
     end
 
     puts "[SUCCESS] Task completed successfully!"
+  end
+
+  private
+
+  def initialize_dates(start_date, end_date)
+    if start_date == end_date
+      starting = parse_date(start_date)
+      ending = starting + 120
+      [starting, ending]
+    else
+      [parse_date(start_date), parse_date(end_date)]
+    end
+  end
+
+  def parse_date(date_string)
+    Date.strptime(date_string, "%d/%m/%Y")
   end
 end
 

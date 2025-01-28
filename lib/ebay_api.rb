@@ -15,7 +15,7 @@ class EbayAPI
     @auth_token = auth_token
   end
 
-  def body(page:)
+  def body(page:, start_date:, end_date:)
     Nokogiri::XML::Builder.new(encoding: 'UTF-8') do |xml|
       xml.GetSellerListRequest(xmlns: "urn:ebay:apis:eBLBaseComponents") do
         xml.RequesterCredentials do
@@ -24,8 +24,8 @@ class EbayAPI
         xml.ErrorLanguage "en_US"
         xml.WarningLevel "High"
         xml.DetailLevel "ReturnAll"
-        xml.StartTimeFrom "2024-12-01T00:00:00.000Z"
-        xml.StartTimeTo "2025-02-16T23:59:59.999Z"
+        xml.StartTimeFrom date_string(start_date)
+        xml.StartTimeTo date_string(end_date)
         xml.UserID @user_id
         xml.IncludeWatchCount "true"
         xml.WarningLevel "High"
@@ -68,5 +68,9 @@ class EbayAPI
     doc = Nokogiri::XML(response.body)
     doc.root.add_namespace_definition('ns', 'urn:ebay:apis:eBLBaseComponents')
     doc
+  end
+
+  def date_string(date)
+    date.strftime("%Y-%m-%dT%H:%M:%S.%LZ")
   end
 end
