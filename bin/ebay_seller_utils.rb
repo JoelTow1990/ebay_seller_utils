@@ -47,6 +47,7 @@ class EbaySellerUtils < Thor
       )
 
       start_date, end_date = initialize_dates(options[:start_date], options[:end_date])
+      persister = ListingPersister.new({}) # A hack, you can't call any methods on this
 
       while end_date < (Date.today + 2)
         request = ebay_api.request(
@@ -77,7 +78,8 @@ class EbaySellerUtils < Thor
 
             ebay_api.listings(response).each_with_index do |listing, idx|
               listing = Listing.new(listing)
-              persister = ListingPersister.new(listing)
+              persister.listing = listing
+
               puts "Processing listing #{idx} of page #{page}"
               persister.persist unless options[:dry_run]
             end
@@ -86,6 +88,9 @@ class EbaySellerUtils < Thor
             next
           end
         end
+
+        start_date = end_date
+        end_date = (end_date + 120)
 
         break if options[:single_iteration]
       end
