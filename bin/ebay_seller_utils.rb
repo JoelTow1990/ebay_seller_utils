@@ -31,84 +31,86 @@ class EbaySellerUtils < Thor
 
     Dotenv.load
 
-    FileUtils.cd(Dir.home)
-    FileUtils.mkdir("EbayListings") unless File.directory?("EbayListings")
-    
-    FileUtils.cd("EbayListings") do
+    @ebay_api = EbayAPI.new(
+      URI('https://api.ebay.com/ws/api.dll'),
+      ENV["USER_ID"],
+      ENV["AUTH_TOKEN"],
+    )
+    setup_environment
+    start_date, end_date = initialize_dates(options[:start_date], options[:end_date])
+    @persister = ListingPersister.new({}) # A hack, you can't call any methods on this
 
-      api_uri = URI('https://api.ebay.com/ws/api.dll')
-      user_id = ENV["USER_ID"]
-      auth_token = ENV["AUTH_TOKEN"]
+    while end_date < (Date.today + 2)
+      request = build_ebay_request(1, start_date, end_date)
 
-      ebay_api = EbayAPI.new(
-        api_uri,
-        user_id,
-        auth_token,
-      )
+      response = @ebay_api.response(request)
 
-      start_date, end_date = initialize_dates(options[:start_date], options[:end_date])
-      persister = ListingPersister.new({}) # A hack, you can't call any methods on this
+      # TODO: Why is the client parsing responses for you?
+      # And deciding how many pages to scrape?
+      # I think there is a confusion of responsibilities here
+      total_pages = @ebay_api.pages_to_scrape(response)
+      puts "Date range: #{start_date.to_s} - #{end_date.to_s}"
+      puts "Total pages for this range: #{total_pages - (options[:start_page] - 1)}"
 
-      FileUtils.touch("Errors.txt") unless File.exist?("Errors.txt")
+      (options[:start_page]..total_pages).each do |page|
+        begin
+          request = build_ebay_request(page, start_date, end_date)
 
-      while end_date < (Date.today + 2)
-        request = ebay_api.request(
-          ebay_api.body(
-            page: 1,
-            start_date: start_date,
-            end_date: end_date,
-            )
-          )
-        response = ebay_api.response(request)
+          response = @ebay_api.response(request)
 
-        total_pages = ebay_api.pages_to_scrape(response)
-        puts "Date range: #{start_date.to_s} - #{end_date.to_s}"
-        puts "Total pages for this range: #{total_pages - (options[:start_page] - 1)}"
+          puts "Extracting data from page #{page}"
 
-        (options[:start_page]..total_pages).each do |page|
           begin
-            request = ebay_api.request(
-              ebay_api.body(
-                page: page,
-                start_date: start_date,
-                end_date: end_date,
-                )
-              )
-            response = ebay_api.response(request)
-
-            puts "Extracting data from page #{page}"
-
-            begin
-              ebay_api.listings(response).each_with_index do |listing, idx|
-                listing = Listing.new(listing)
-                persister.listing = listing
-
-                puts "Processing listing #{idx} of page #{page}"
-                persister.persist unless options[:dry_run]
-              end
-            rescue StandardError => e
-              File.open("Errors.txt", 'a') do |f|
-                f.puts("#{listing.title}")
-              end
-            end
-
+            process_listings
           rescue StandardError => e
-            puts "Error with request on page #{page}: #{e}"
-            next
+            File.open("Errors.txt", 'a') do |f|
+              f.puts("#{listing.title}")
+            end
           end
+
+        rescue StandardError => e
+          puts "Error with request on page #{page}: #{e}"
+          next
         end
-
-        start_date = end_date
-        end_date = (end_date + 120)
-
-        break if options[:single_iteration]
       end
+
+      start_date = end_date
+      end_date = (end_date + 120)
+
+      break if options[:single_iteration]
     end
 
     puts "[SUCCESS] Task completed successfully!"
   end
 
   private
+
+  def setup_environment
+    FileUtils.cd(Dir.home)
+    FileUtils.mkdir("EbayListings") unless File.directory?("EbayListings")
+    FileUtils.cd("EbayListings")
+    FileUtils.touch("errors.txt") unless File.exist?("Errors.txt")
+  end
+
+  def build_ebay_request(page, start_date, end_date)
+    @ebay_api.request(
+      @ebay_api.body(
+        page: page,
+        start_date: start_date,
+        end_date: end_date
+      )
+    )
+  end
+
+  def process_listings
+    @ebay_api.listings(response).each_with_index do |listing, idx|
+      listing = Listing.new(listing)
+      @persister.listing = listing
+
+      puts "Processing listing #{idx} of page #{page}"
+      @persister.persist unless options[:dry_run]
+    end
+  end
 
   def initialize_dates(start_date, end_date)
     if start_date >= end_date
