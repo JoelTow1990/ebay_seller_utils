@@ -41,37 +41,14 @@ class EbaySellerUtils < Thor
     @persister = ListingPersister.new({}) # A hack, you can't call any methods on this
 
     while end_date < (Date.today + 2)
-      request = build_ebay_request(1, start_date, end_date)
-
-      response = @ebay_api.response(request)
-
-      # TODO: Why is the client parsing responses for you?
-      # And deciding how many pages to scrape?
-      # I think there is a confusion of responsibilities here
-      total_pages = @ebay_api.pages_to_scrape(response)
       puts "Date range: #{start_date.to_s} - #{end_date.to_s}"
-      puts "Total pages for this range: #{total_pages - (options[:start_page] - 1)}"
 
-      (options[:start_page]..total_pages).each do |page|
-        begin
-          request = build_ebay_request(page, start_date, end_date)
+      page_range(start_date, end_date).each do |page|
+        response = current_response(page, start_date, end_date)
+        puts "Extracting data from page #{page}"
+        next if response.nil?
 
-          response = @ebay_api.response(request)
-
-          puts "Extracting data from page #{page}"
-
-          begin
-            process_listings
-          rescue StandardError => e
-            File.open("Errors.txt", 'a') do |f|
-              f.puts("#{listing.title}")
-            end
-          end
-
-        rescue StandardError => e
-          puts "Error with request on page #{page}: #{e}"
-          next
-        end
+        process_listings(response)    
       end
 
       start_date = end_date
@@ -102,13 +79,38 @@ class EbaySellerUtils < Thor
     )
   end
 
-  def process_listings
+  def current_response(page, start_date, end_date)
+    request = build_ebay_request(page, start_date, end_date)
+    return @ebay_api.response(request)
+
+  rescue StandardError => e
+    puts "Error with request on page #{page}: #{e}"
+    return nil
+  end
+
+  def page_range(start_date, end_date)
+    response = current_response(1, start_date, end_date)
+
+    # TODO: Why is the client parsing responses for you?
+    # And deciding how many pages to scrape?
+    # I think there is a confusion of responsibilities here
+    total_pages = @ebay_api.pages_to_scrape(response)
+    
+
+    options[:start_page]..total_pages
+  end
+
+  def process_listings(response)
     @ebay_api.listings(response).each_with_index do |listing, idx|
       listing = Listing.new(listing)
       @persister.listing = listing
 
-      puts "Processing listing #{idx} of page #{page}"
       @persister.persist unless options[:dry_run]
+
+    rescue StandardError => e
+      File.open("Errors.txt", 'a') do |f|
+        f.puts("#{listing.title}")
+      end
     end
   end
 
