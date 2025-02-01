@@ -3,11 +3,12 @@ require 'mini_magick'
 require 'uri'
 
 class ListingPersister
-  attr_writer :listing
+  attr_writer :listing, :titles
 
   def initialize(listing)
     @listing = listing
-    @record = {}
+    @record = Set.new
+    @titles = Hash.new(0)
   end
 
   def persist
@@ -22,11 +23,11 @@ class ListingPersister
       FileUtils.cd(persist_dir) do
         puts "PWD: #{FileUtils.pwd}"
         puts "Current record: #{@record}"
-        return unless valid_entry?(persist_dir)
+        return unless valid_entry?
 
-        persist_dir = entry_exists?(persist_dir) ? persist_dir + random_char : persist_dir
+        persist_dir = unique_entry? ? persist_dir : persist_dir + random_char
 
-        update_record(persist_dir)
+        update_record!
         persist_metadata
         persist_images
       end
@@ -63,28 +64,21 @@ class ListingPersister
     end
   end
 
-  def valid_entry?(persist_dir)
-    return true unless entry_exists?(persist_dir)
-
-    unique_entry?(persist_dir)
+  def valid_entry?
+    return true unless @record.include?(@listing)
+    
+    false
   end
 
-  def entry_exists?(persist_dir)
-     @record.keys.include?(persist_dir)
-  end
-
-  def unique_entry?(persist_dir)
-    other_path = File.expand_path(@record[persist_dir])
-    other = Listing::Metadata.from_txt(other_path)
-
-    return true unless @listing.metadata == other
+  def unique_entry?
+    return true unless @titles.keys.include?(normalised_title)
 
     false
   end
 
-  def update_record(persist_dir)
-    puts persist_dir
-    @record[persist_dir] = "#{File.join(Dir.home, "EbayListings", normalised_category, persist_dir)}/metadata.txt"
+  def update_record!
+    @record.add(@listing)
+    @titles[normalised_title] += 1
   end
 
   private
